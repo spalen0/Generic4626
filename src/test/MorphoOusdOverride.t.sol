@@ -133,6 +133,18 @@ contract MorphoOusdOperationTest is OperationTest, MorphoOusdSetup {
         strategy.deposit(amount, randomUser);
     }
 
+    function test_random_user_can_deposit_for_ousd() public {
+        uint256 amount = 1000e6;
+        address randomUser = address(0x123);
+        airdrop(ERC20(asset), randomUser, amount);
+        uint256 balanceBefore = strategy.totalAssets();
+        vm.startPrank(randomUser);
+        ERC20(asset).approve(address(strategy), amount);
+        strategy.deposit(amount, OUSD);
+        uint256 balanceAfter = strategy.totalAssets();
+        assertGt(balanceAfter, balanceBefore, "!balance");
+    }
+
     function _test_uniswapV3_swap() public {
         uint256 amount = 1000e6;
         mintAndDepositIntoStrategy(strategy, user, amount);
