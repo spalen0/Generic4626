@@ -92,10 +92,11 @@ contract MorphoOusd is Base4626Compounder, UniswapV3Swapper {
             if (_allRewardTokens[i] == _token) {
                 allRewardTokens[i] = _allRewardTokens[_length - 1];
                 allRewardTokens.pop();
+                break;
             }
         }
         delete swapType[_token];
-        delete minAmountToSellMapping[_token];
+        // delete minAmountToSellMapping[_token]; // no need to delete this
     }
 
     function getAllRewardTokens() external view returns (address[] memory) {
