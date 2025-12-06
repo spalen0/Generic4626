@@ -48,7 +48,7 @@ contract MorphoOusd is Base4626Compounder, UniswapV3Swapper {
 
     // Override because we need to queue change to morpho vault to
     // This contract must have allocator role to change the vault queue
-     function _deployFunds(uint256 _amount) internal virtual override {
+    function _deployFunds(uint256 _amount) internal virtual override {
         Id[] memory newSupplyQueue = new Id[](1);
         newSupplyQueue[0] = supplyMarketId;
         IMetaMorpho mmvault = IMetaMorpho(address(vault));
@@ -65,7 +65,6 @@ contract MorphoOusd is Base4626Compounder, UniswapV3Swapper {
     function availableDepositLimit(
         address _receiver
     ) public view override returns (uint256) {
-        // TODO: we need to check sender also? this allows others to donate
         if (_receiver == OUSD) {
             return type(uint256).max;
         }
@@ -92,10 +91,10 @@ contract MorphoOusd is Base4626Compounder, UniswapV3Swapper {
             if (_allRewardTokens[i] == _token) {
                 allRewardTokens[i] = _allRewardTokens[_length - 1];
                 allRewardTokens.pop();
+                break;
             }
         }
         delete swapType[_token];
-        delete minAmountToSellMapping[_token];
     }
 
     function getAllRewardTokens() external view returns (address[] memory) {
