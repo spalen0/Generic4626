@@ -16,7 +16,6 @@ import {IMetaMorpho} from "../interfaces/Morpho/IMetaMorpho.sol";
 import {AuctionFactory, Auction} from "@periphery/Auctions/AuctionFactory.sol";
 
 abstract contract MorphoOusdSetup is Setup {
-
     address public MORPHO = 0x9D03bb2092270648d7480049d0E58d2FcF0E5123;
 
     address public swapToken;
@@ -24,7 +23,6 @@ abstract contract MorphoOusdSetup is Setup {
     address public constant SMS = 0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7;
 
     address public OUSD = 0x2A8e1E676Ec238d8A992307B495b45B3fEAa5e86;
-
 
     function setUp() public virtual override {
         _setTokenAddrs();
@@ -79,11 +77,14 @@ abstract contract MorphoOusdSetup is Setup {
         _strategy.setEmergencyAdmin(SMS);
         _strategy.setProfitMaxUnlockTime(60 * 60 * 24 * 3);
         // set to idle market
-        MorphoOusd(address(_strategy)).setSupplyMarketId(Id.wrap(0x54efdee08e272e929034a8f26f7ca34b1ebe364b275391169b28c6d7db24dbc8));
+        MorphoOusd(address(_strategy)).setSupplyMarketId(
+            Id.wrap(
+                0x54efdee08e272e929034a8f26f7ca34b1ebe364b275391169b28c6d7db24dbc8
+            )
+        );
 
         vm.prank(management);
         _strategy.acceptManagement();
-
 
         address usdcMorphoVaultOwner = 0xe5e2Baf96198c56380dDD5E992D7d1ADa0e989c0;
         vm.startPrank(usdcMorphoVaultOwner);
@@ -95,7 +96,6 @@ abstract contract MorphoOusdSetup is Setup {
 }
 
 contract MorphoOusdOperationTest is OperationTest, MorphoOusdSetup {
-
     function setUp() public virtual override(OperationTest, MorphoOusdSetup) {
         MorphoOusdSetup.setUp();
 
@@ -119,7 +119,12 @@ contract MorphoOusdOperationTest is OperationTest, MorphoOusdSetup {
         vm.stopPrank();
     }
 
-    function setUpStrategy() public virtual override(Setup, MorphoOusdSetup) returns (address) {
+    function setUpStrategy()
+        public
+        virtual
+        override(Setup, MorphoOusdSetup)
+        returns (address)
+    {
         return MorphoOusdSetup.setUpStrategy();
     }
 
@@ -292,13 +297,17 @@ contract MorphoOusdShutdownTest is ShutdownTest, MorphoOusdSetup {
         MorphoOusdSetup.setUp();
     }
 
-    function setUpStrategy() public virtual override(Setup, MorphoOusdSetup) returns (address) {
+    function setUpStrategy()
+        public
+        virtual
+        override(Setup, MorphoOusdSetup)
+        returns (address)
+    {
         return MorphoOusdSetup.setUpStrategy();
     }
 }
 
 contract MorphoOusdOracleTest is OracleTest, MorphoOusdSetup {
-
     function setUp() public virtual override(OracleTest, MorphoOusdSetup) {
         MorphoOusdSetup.setUp();
 
@@ -306,12 +315,22 @@ contract MorphoOusdOracleTest is OracleTest, MorphoOusdSetup {
         MorphoAprOracle(address(oracle)).setMorphoRate(vault, 6898500000000000);
     }
 
-    function setUpStrategy() public virtual override(Setup, MorphoOusdSetup) returns (address) {
+    function setUpStrategy()
+        public
+        virtual
+        override(Setup, MorphoOusdSetup)
+        returns (address)
+    {
         return MorphoOusdSetup.setUpStrategy();
     }
 
-    function test_oracle(uint256 _amount, uint16 _percentChange) public virtual override {
-        uint256 rewardsRate = MorphoAprOracle(address(oracle)).getRewardsRate(vault);
+    function test_oracle(
+        uint256 _amount,
+        uint16 _percentChange
+    ) public virtual override {
+        uint256 rewardsRate = MorphoAprOracle(address(oracle)).getRewardsRate(
+            vault
+        );
         console.log("Rewards rate is ", rewardsRate);
         super.test_oracle(_amount, _percentChange);
     }
