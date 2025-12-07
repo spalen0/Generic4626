@@ -4,6 +4,7 @@ on:
   push:
     branches:
     - master
+    - ousd
   pull_request:
 
 jobs:
