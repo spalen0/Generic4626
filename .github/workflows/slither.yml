@@ -3,23 +3,22 @@ on:
   push:
     branches:
     - master
-    - ousd
   pull_request:
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+        uses: foundry-rs/foundry-toolchain@v1.5
         with:
           version: nightly
 
       - name: Slither analysis
-        uses: crytic/slither-action@v0.3.0
+        uses: crytic/slither-action@v0.4.1
         with:
           fail-on: 'medium'

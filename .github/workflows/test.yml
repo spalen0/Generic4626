@@ -5,7 +5,6 @@ on:
     branches:
     - master
     - develop
-    - ousd
   pull_request:
 
 env:
@@ -19,12 +18,12 @@ jobs:
     name: Foundry project
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+        uses: foundry-rs/foundry-toolchain@v1.5
         with:
           version: nightly
 
