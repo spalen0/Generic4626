@@ -10,73 +10,147 @@ import {OracleTest, StrategyAprOracle} from "./Oracle.t.sol";
 
 import {MorphoAprOracle} from "../periphery/MorphoAprOracle.sol";
 import {IMorphoCompounder} from "../Strategies/Morpho/interfaces/IMorphoCompounder.sol";
-import {MorphoCompounderFactory} from "../Strategies/Morpho/Mainnet/MorphoCompounderFactory.sol";
+import {MorphoOusd, Id} from "../Strategies/Morpho/Mainnet/MorphoOusd.sol";
+import {IMetaMorpho} from "../interfaces/Morpho/IMetaMorpho.sol";
 
 import {AuctionFactory, Auction} from "@periphery/Auctions/AuctionFactory.sol";
 
-contract MorphoOperationTest is OperationTest {
-    MorphoCompounderFactory public morphoCompounderFactory;
-
+abstract contract MorphoOusdSetup is Setup {
     address public MORPHO = 0x9D03bb2092270648d7480049d0E58d2FcF0E5123;
 
     address public swapToken;
 
     address public constant SMS = 0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7;
 
+    address public OUSD = 0x2A8e1E676Ec238d8A992307B495b45B3fEAa5e86;
+
     function setUp() public virtual override {
-        super.setUp();
+        _setTokenAddrs();
 
-        swapToken = tokenAddrs["USDT"];
-
-        morphoCompounderFactory = new MorphoCompounderFactory(
-            management,
-            performanceFeeRecipient,
-            keeper,
-            SMS
-        );
-
-        // Usual Boosted USDC vault
-        vault = 0xd63070114470f685b75B74D60EEc7c1113d33a3D;
-
-        asset = ERC20(address(IStrategyInterface(vault).asset()));
-
-        strategy = IStrategyInterface(setUpMorpho());
-
-        maxFuzzAmount = 1_000_000e6;
+        // Set asset
+        asset = ERC20(tokenAddrs["USDC"]);
         minFuzzAmount = 1e6;
+        maxFuzzAmount = 100_000e6;
+
+        // Yearn USDC vault
+        vault = 0xF9bdDd4A9b3A45f980e11fDDE96e16364dDBEc49;
+        user = OUSD;
+
+        // Set decimals
+        decimals = asset.decimals();
+
+        // Deploy strategy and set variables
+        strategy = IStrategyInterface(setUpStrategy());
+        factory = strategy.FACTORY();
+
+        // label all the used addresses for traces
+        vm.label(keeper, "keeper");
+        vm.label(factory, "factory");
+        vm.label(address(asset), "asset");
+        vm.label(management, "management");
+        vm.label(address(strategy), "strategy");
+        vm.label(performanceFeeRecipient, "performanceFeeRecipient");
     }
 
-    function setUpMorpho() public virtual returns (address) {
+    function setUpStrategy() public virtual override returns (address) {
+        // MORPHO token
+        swapToken = tokenAddrs["MORPHO"];
+
         // we save the strategy as a IStrategyInterface to give it the needed interface
         IStrategyInterface _strategy = IStrategyInterface(
-            morphoCompounderFactory.newMorphoCompounder(vault)
+            address(
+                new MorphoOusd(
+                    address(asset),
+                    "Morpho OUSD Strategy",
+                    vault,
+                    OUSD
+                )
+            )
         );
 
-        vm.startPrank(management);
+        // set keeper
+        _strategy.setKeeper(keeper);
+        // set treasury
+        _strategy.setPerformanceFeeRecipient(performanceFeeRecipient);
+        // set management of the strategy
+        _strategy.setPendingManagement(management);
+        _strategy.setEmergencyAdmin(SMS);
+        _strategy.setProfitMaxUnlockTime(60 * 60 * 24 * 3);
+        // set to idle market
+        MorphoOusd(address(_strategy)).setSupplyMarketId(
+            Id.wrap(
+                0x54efdee08e272e929034a8f26f7ca34b1ebe364b275391169b28c6d7db24dbc8
+            )
+        );
+
+        vm.prank(management);
         _strategy.acceptManagement();
 
-        IMorphoCompounder(address(_strategy)).addRewardToken(
+        address usdcMorphoVaultOwner = 0xe5e2Baf96198c56380dDD5E992D7d1ADa0e989c0;
+        vm.startPrank(usdcMorphoVaultOwner);
+        IMetaMorpho(vault).setIsAllocator(address(_strategy), true);
+        vm.stopPrank();
+
+        return address(_strategy);
+    }
+}
+
+contract MorphoOusdOperationTest is OperationTest, MorphoOusdSetup {
+    function setUp() public virtual override(OperationTest, MorphoOusdSetup) {
+        MorphoOusdSetup.setUp();
+
+        vm.startPrank(management);
+        IMorphoCompounder(address(strategy)).addRewardToken(
             swapToken,
             IMorphoCompounder.SwapType.UNISWAP_V3
         );
 
-        IMorphoCompounder(address(_strategy)).setUniFees(
+        IMorphoCompounder(address(strategy)).setUniFees(
             swapToken,
-            IMorphoCompounder(address(_strategy)).base(),
+            IMorphoCompounder(address(strategy)).base(),
             100
         );
 
-        IMorphoCompounder(address(_strategy)).setUniFees(
-            IMorphoCompounder(address(_strategy)).base(),
+        IMorphoCompounder(address(strategy)).setUniFees(
+            IMorphoCompounder(address(strategy)).base(),
             address(asset),
             100
         );
-
         vm.stopPrank();
-        return address(_strategy);
     }
 
-    function test_uniswapV3_swap() public {
+    function setUpStrategy()
+        public
+        virtual
+        override(Setup, MorphoOusdSetup)
+        returns (address)
+    {
+        return MorphoOusdSetup.setUpStrategy();
+    }
+
+    function test_random_user_cant_deposit() public {
+        uint256 amount = 1000e6;
+        address randomUser = address(0x123);
+        airdrop(ERC20(asset), randomUser, amount);
+        vm.startPrank(randomUser);
+        ERC20(asset).approve(address(strategy), amount);
+        vm.expectRevert("ERC4626: deposit more than max");
+        strategy.deposit(amount, randomUser);
+    }
+
+    function test_random_user_can_deposit_for_ousd() public {
+        uint256 amount = 1000e6;
+        address randomUser = address(0x123);
+        airdrop(ERC20(asset), randomUser, amount);
+        uint256 balanceBefore = strategy.totalAssets();
+        vm.startPrank(randomUser);
+        ERC20(asset).approve(address(strategy), amount);
+        strategy.deposit(amount, OUSD);
+        uint256 balanceAfter = strategy.totalAssets();
+        assertGt(balanceAfter, balanceBefore, "!balance");
+    }
+
+    function _test_uniswapV3_swap() public {
         uint256 amount = 1000e6;
         mintAndDepositIntoStrategy(strategy, user, amount);
 
@@ -218,150 +292,36 @@ contract MorphoOperationTest is OperationTest {
     }
 }
 
-contract MorphoWETHOperationTest is MorphoOperationTest {
-    function setUp() public virtual override {
-        super.setUp();
+contract MorphoOusdShutdownTest is ShutdownTest, MorphoOusdSetup {
+    function setUp() public virtual override(ShutdownTest, MorphoOusdSetup) {
+        MorphoOusdSetup.setUp();
+    }
 
-        // WETH vault
-        vault = 0x4881Ef0BF6d2365D3dd6499ccd7532bcdBCE0658;
-
-        asset = ERC20(address(IStrategyInterface(vault).asset()));
-
-        strategy = IStrategyInterface(setUpMorpho());
-
-        maxFuzzAmount = 1_000e18;
-        minFuzzAmount = 1e16;
+    function setUpStrategy()
+        public
+        virtual
+        override(Setup, MorphoOusdSetup)
+        returns (address)
+    {
+        return MorphoOusdSetup.setUpStrategy();
     }
 }
 
-contract MorphoShutdownTest is ShutdownTest {
-    MorphoCompounderFactory public morphoCompounderFactory;
-
-    address public MORPHO = 0x9D03bb2092270648d7480049d0E58d2FcF0E5123;
-
-    address public swapToken;
-
-    address public constant SMS = 0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7;
-
-    function setUp() public virtual override {
-        super.setUp();
-
-        swapToken = tokenAddrs["USDT"];
-
-        morphoCompounderFactory = new MorphoCompounderFactory(
-            management,
-            performanceFeeRecipient,
-            keeper,
-            SMS
-        );
-
-        // Usual Boosted USDC vault
-        vault = 0xd63070114470f685b75B74D60EEc7c1113d33a3D;
-
-        asset = ERC20(address(IStrategyInterface(vault).asset()));
-
-        strategy = IStrategyInterface(setUpMorpho());
-
-        maxFuzzAmount = 1_000_000e6;
-        minFuzzAmount = 1e6;
-    }
-
-    function setUpMorpho() public virtual returns (address) {
-        // we save the strategy as a IStrategyInterface to give it the needed interface
-        IStrategyInterface _strategy = IStrategyInterface(
-            morphoCompounderFactory.newMorphoCompounder(vault)
-        );
-
-        vm.startPrank(management);
-        _strategy.acceptManagement();
-
-        IMorphoCompounder(address(_strategy)).addRewardToken(
-            swapToken,
-            IMorphoCompounder.SwapType.UNISWAP_V3
-        );
-
-        IMorphoCompounder(address(_strategy)).setUniFees(
-            swapToken,
-            IMorphoCompounder(address(_strategy)).base(),
-            100
-        );
-
-        IMorphoCompounder(address(_strategy)).setUniFees(
-            IMorphoCompounder(address(_strategy)).base(),
-            address(asset),
-            100
-        );
-
-        vm.stopPrank();
-
-        return address(_strategy);
-    }
-}
-
-contract MorphoOracleTest is OracleTest {
-    MorphoCompounderFactory public morphoCompounderFactory;
-
-    address public MORPHO = 0x9D03bb2092270648d7480049d0E58d2FcF0E5123;
-
-    address public swapToken;
-
-    address public constant SMS = 0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7;
-
-    function setUp() public virtual override {
-        super.setUp();
-
-        swapToken = tokenAddrs["LINK"];
-
-        morphoCompounderFactory = new MorphoCompounderFactory(
-            management,
-            performanceFeeRecipient,
-            keeper,
-            SMS
-        );
-
-        // Usual Boosted USDC vault
-        vault = 0x8CB3649114051cA5119141a34C200D65dc0Faa73;
-
-        asset = ERC20(address(IStrategyInterface(vault).asset()));
-
-        strategy = IStrategyInterface(setUpMorpho());
-
-        maxFuzzAmount = 1_000_000e6;
-        minFuzzAmount = 1e6;
+contract MorphoOusdOracleTest is OracleTest, MorphoOusdSetup {
+    function setUp() public virtual override(OracleTest, MorphoOusdSetup) {
+        MorphoOusdSetup.setUp();
 
         oracle = StrategyAprOracle(address(new MorphoAprOracle()));
-
         MorphoAprOracle(address(oracle)).setMorphoRate(vault, 6898500000000000);
     }
 
-    function setUpMorpho() public virtual returns (address) {
-        // we save the strategy as a IStrategyInterface to give it the needed interface
-        IStrategyInterface _strategy = IStrategyInterface(
-            morphoCompounderFactory.newMorphoCompounder(vault)
-        );
-
-        vm.startPrank(management);
-        _strategy.acceptManagement();
-
-        IMorphoCompounder(address(_strategy)).addRewardToken(
-            swapToken,
-            IMorphoCompounder.SwapType.UNISWAP_V3
-        );
-
-        IMorphoCompounder(address(_strategy)).setUniFees(
-            swapToken,
-            IMorphoCompounder(address(_strategy)).base(),
-            100
-        );
-
-        IMorphoCompounder(address(_strategy)).setUniFees(
-            IMorphoCompounder(address(_strategy)).base(),
-            address(asset),
-            100
-        );
-
-        vm.stopPrank();
-        return address(_strategy);
+    function setUpStrategy()
+        public
+        virtual
+        override(Setup, MorphoOusdSetup)
+        returns (address)
+    {
+        return MorphoOusdSetup.setUpStrategy();
     }
 
     function test_oracle(
