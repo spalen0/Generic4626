@@ -9,7 +9,6 @@ contract SturdyLender is Base4626Compounder, AuctionSwapper {
     // This can be used to set different mins for different tokens
     // or to set to uin256.max if selling a reward token is reverting
     mapping(address => uint256) public minAmountToSellMapping;
-
     constructor(
         address _asset,
         string memory _name,

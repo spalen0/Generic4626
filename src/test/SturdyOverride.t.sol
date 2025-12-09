@@ -20,6 +20,8 @@ contract SturdyOperationTest is OperationTest {
     SturdyLenderFactory public sturdyLenderFactory =
         new SturdyLenderFactory(management, performanceFeeRecipient, keeper);
 
+    AuctionFactory public auctionFactory = new AuctionFactory();
+
     function setUp() public virtual override {
         super.setUp();
 
@@ -54,9 +56,7 @@ contract SturdyOperationTest is OperationTest {
         );
 
         // Deploy an auction contract
-        address _auction = AuctionFactory(
-            ISturdyLender(address(strategy)).auctionFactory()
-        ).createNewAuction(address(asset), address(strategy), management);
+        address _auction = auctionFactory.createNewAuction(address(asset), address(strategy), management);
 
         address rewardToken = tokenAddrs["USDC"];
         address buyer = address(123);
@@ -66,9 +66,7 @@ contract SturdyOperationTest is OperationTest {
         Auction(_auction).enable(rewardToken);
 
         // Auction must have asset as want.
-        address _badAuction = AuctionFactory(
-            ISturdyLender(address(strategy)).auctionFactory()
-        ).createNewAuction(address(rewardToken), address(strategy), management);
+        address _badAuction = auctionFactory.createNewAuction(address(rewardToken), address(strategy), management);
         vm.expectRevert("wrong want");
         vm.prank(management);
         ISturdyLender(address(strategy)).setAuction(_badAuction);
